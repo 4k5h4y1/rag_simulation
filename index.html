@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>RAG Learning Simulator</title>
+
+<style>
+
+body{
+font-family:system-ui;
+background:#0f172a;
+color:white;
+margin:0;
+}
+
+header{
+padding:20px;
+text-align:center;
+font-size:28px;
+background:#020617;
+}
+
+.container{
+max-width:1100px;
+margin:auto;
+padding:25px;
+}
+
+.card{
+background:#020617;
+padding:20px;
+margin-bottom:20px;
+border-radius:10px;
+border:1px solid #1e293b;
+}
+
+h2{
+color:#38bdf8;
+}
+
+textarea,input{
+width:100%;
+padding:10px;
+background:#0f172a;
+border:1px solid #334155;
+color:white;
+border-radius:6px;
+}
+
+button{
+margin-top:10px;
+padding:10px 16px;
+background:#38bdf8;
+border:none;
+border-radius:6px;
+cursor:pointer;
+}
+
+.chunk{
+background:#1e293b;
+padding:10px;
+margin:6px 0;
+border-radius:6px;
+}
+
+.vector{
+font-family:monospace;
+font-size:12px;
+color:#93c5fd;
+}
+
+.pipeline{
+display:flex;
+flex-wrap:wrap;
+gap:8px;
+margin-top:20px;
+}
+
+.step{
+padding:10px;
+background:#1e293b;
+border-radius:8px;
+font-size:13px;
+flex:1;
+text-align:center;
+}
+
+.active{
+background:#0369a1;
+}
+
+.result{
+background:#022c22;
+padding:12px;
+border-radius:8px;
+margin-top:10px;
+}
+
+.info{
+color:#94a3b8;
+font-size:13px;
+}
+
+</style>
+</head>
+
+<body>
+
+<header>Interactive RAG Simulator</header>
+
+<div class="container">
+
+<div class="card">
+
+<h2>1. Knowledge Base</h2>
+
+<div class="info">Enter documentation. Each paragraph becomes a chunk.</div>
+
+<textarea id="docs" rows="6">
+
+VPN Phase 1 failures happen due to encryption mismatch.
+
+VPN Phase 2 issues happen due to PFS mismatch.
+
+Authentication failures occur due to incorrect certificates.
+
+Tunnel drops can occur because NAT traversal fails.
+
+</textarea>
+
+<button onclick="chunkDocs()">Chunk Documents</button>
+
+<div id="chunks"></div>
+
+</div>
+
+<div class="card">
+
+<h2>2. Create Embeddings</h2>
+
+<div class="info">Chunks are converted to vectors.</div>
+
+<button onclick="embed()">Generate Embeddings</button>
+
+<div id="embeddings"></div>
+
+</div>
+
+<div class="card">
+
+<h2>3. Ask a Question</h2>
+
+<input id="query" placeholder="Why is VPN failing Phase 2?">
+
+<button onclick="search()">Run RAG</button>
+
+</div>
+
+<div class="card">
+
+<h2>4. Similarity Search</h2>
+
+<div id="searchResults"></div>
+
+</div>
+
+<div class="card">
+
+<h2>5. Retrieved Context</h2>
+
+<div id="context"></div>
+
+</div>
+
+<div class="card">
+
+<h2>6. LLM Prompt</h2>
+
+<div id="prompt"></div>
+
+</div>
+
+<div class="card">
+
+<h2>7. Generated Answer</h2>
+
+<div id="answer"></div>
+
+</div>
+
+<div class="card">
+
+<h2>Pipeline</h2>
+
+<div class="pipeline">
+
+<div id="p1" class="step">Raw Data</div>
+<div id="p2" class="step">Chunking</div>
+<div id="p3" class="step">Embeddings</div>
+<div id="p4" class="step">Vector DB</div>
+<div id="p5" class="step">Query</div>
+<div id="p6" class="step">Similarity</div>
+<div id="p7" class="step">Retrieve</div>
+<div id="p8" class="step">Generate</div>
+
+</div>
+
+</div>
+
+</div>
+
+<script>
+
+let chunks=[]
+let vectors=[]
+
+const vocab=["phase1","phase2","auth","tunnel","nat"]
+
+function activate(step){
+
+for(let i=1;i<=8;i++){
+document.getElementById("p"+i).classList.remove("active")
+}
+
+document.getElementById(step).classList.add("active")
+
+}
+
+function chunkDocs(){
+
+activate("p2")
+
+let text=document.getElementById("docs").value.trim()
+
+chunks=text.split(/\n\s*\n/)
+
+let html=""
+
+chunks.forEach((c,i)=>{
+html+=`<div class="chunk"><b>Chunk ${i+1}</b><br>${c}</div>`
+})
+
+document.getElementById("chunks").innerHTML=html
+
+}
+
+function createVector(text){
+
+text=text.toLowerCase()
+
+return vocab.map(word=>text.includes(word)?1:0)
+
+}
+
+function embed(){
+
+activate("p3")
+
+vectors=[]
+
+let html=""
+
+chunks.forEach((c,i)=>{
+
+let vec=createVector(c)
+
+vectors.push(vec)
+
+html+=`
+<div class="chunk">
+Chunk ${i+1}
+<div class="vector">[${vec.join(", ")}]</div>
+</div>
+`
+
+})
+
+document.getElementById("embeddings").innerHTML=html
+
+}
+
+function dot(a,b){
+
+let s=0
+
+for(let i=0;i<a.length;i++){
+s+=a[i]*b[i]
+}
+
+return s
+
+}
+
+function search(){
+
+activate("p5")
+
+let query=document.getElementById("query").value
+
+let qVec=createVector(query)
+
+activate("p6")
+
+let results=[]
+
+vectors.forEach((vec,i)=>{
+
+let score=dot(vec,qVec)
+
+results.push({
+chunk:chunks[i],
+score:score
+})
+
+})
+
+results.sort((a,b)=>b.score-a.score)
+
+let html=""
+
+results.forEach(r=>{
+html+=`
+<div class="chunk">
+${r.chunk}
+<div class="info">Similarity score: ${r.score}</div>
+</div>
+`
+})
+
+document.getElementById("searchResults").innerHTML=html
+
+let best=results[0].chunk
+
+activate("p7")
+
+document.getElementById("context").innerHTML=
+`<div class="result">${best}</div>`
+
+activate("p8")
+
+let prompt=
+
+`Use the context to answer the question.
+
+Context:
+${best}
+
+Question:
+${query}`
+
+document.getElementById("prompt").innerHTML=
+`<div class="chunk"><pre>${prompt}</pre></div>`
+
+document.getElementById("answer").innerHTML=
+`<div class="result">
+The retrieved documentation suggests:
+
+${best}
+
+This chunk was selected because its embedding vector was most similar to the query embedding.
+</div>`
+
+}
+
+</script>
+
+</body>
+</html>
